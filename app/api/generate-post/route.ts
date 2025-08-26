@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { prisma } from '@/lib/prisma';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -67,7 +70,26 @@ export async function POST(request: NextRequest) {
     // Récupération du texte généré
     const generatedPost = response.choices[0].message.content || "Impossible de générer un post. Veuillez réessayer.";
 
-    // Renvoi de la réponse
+    // Get current user
+    const supabase = createRouteHandlerClient({ cookies });
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Save post to database
+      const post = await prisma.post.create({
+        data: {
+          content: generatedPost,
+          style,
+          userId: user.id,
+          // Store image URL if we had image storage implemented
+          imageUrl: null
+        }
+      });
+      
+      return NextResponse.json({ post: generatedPost, postId: post.id });
+    }
+    
+    // Renvoi de la réponse si pas d'utilisateur connecté
     return NextResponse.json({ post: generatedPost });
     
   } catch (error: any) {
